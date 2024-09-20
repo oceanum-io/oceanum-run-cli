@@ -1,12 +1,13 @@
+import sys
 
 import click
 
 from oceanum.cli.common.renderer import Renderer, RenderField
 from oceanum.cli.auth import login_required
+from . import models
 from .main import describe_group
 from .client import DeployManagerClient
-
-
+from .utils import chk, wrn, err, echoerr
 
 @describe_group.command(name='user', help='List DPM Users')
 @click.pass_context
@@ -24,4 +25,9 @@ def describe_user(ctx: click.Context):
             mod=lambda x: f"{x['resource_type'].removesuffix('s')}: {x['name']}"),
     ]
     users = client.get_users()
-    click.echo(Renderer(data=users, fields=fields).render(output_format='plain'))
+    if isinstance(users, models.ErrorResponse):
+        click.echo(f"{err} Error fetching users:")
+        echoerr(users)
+        return 1
+    else:
+        click.echo(Renderer(data=users, fields=fields).render(output_format='plain'))

@@ -1,3 +1,4 @@
+import sys
 from os import linesep
 
 import click
@@ -5,9 +6,10 @@ import requests
 
 from oceanum.cli.common.renderer import Renderer, output_format_option, RenderField
 from oceanum.cli.auth import login_required
+from . import models
 from .main import list_group, describe_group, update_group
 from .client import DeployManagerClient
-from .utils import format_route_status as _frs, wrn
+from .utils import format_route_status as _frs, wrn, echoerr
 
 @update_group.group(name='route', help='Update DPM Routes')
 def update_route():
@@ -48,6 +50,10 @@ def list_routes(ctx: click.Context, output: str, open: bool, services: bool, app
     })
     if not routes:
         click.echo('No routes found!')
+    elif isinstance(routes, models.ErrorResponse):
+        click.echo(f"{wrn} Error fetching routes:")
+        echoerr(routes)
+        sys.exit(1)
     else:
         click.echo(Renderer(data=routes, fields=fields).render(output_format=output))
 
@@ -57,12 +63,8 @@ def list_routes(ctx: click.Context, output: str, open: bool, services: bool, app
 @login_required
 def describe_route(ctx: click.Context, route_name: str):
     client = DeployManagerClient(ctx)
-    try:
-        route = client.get_route(route_name)
-    except requests.exceptions.HTTPError as e:
-        click.echo(f"Route '{route_name}' doesn't exist or isn't authorized!")
-        return
-    else:
+    route = client.get_route(route_name)
+    if isinstance(route, models.RouteSchema):
         fields = [
             RenderField(label='Name', path='$.name'),
             RenderField(label='Project', path='$.project'),
@@ -83,12 +85,13 @@ def describe_route(ctx: click.Context, route_name: str):
             RenderField(label='Thumbnail URL', path='$.thumbnail'),
         ]
             
-        if route is not None:
-            click.echo(
-                Renderer(data=[route], fields=fields).render(output_format='plain'))
-        else:
-            click.echo(f"Route '{route_name}' not found!")
-
+        click.echo(
+            Renderer(data=[route], fields=fields).render(output_format='plain')
+        )
+    else:
+        click.echo(f"{wrn} Error fetching route:")
+        echoerr(route)
+        sys.exit(1)
 
 @update_route.command(name='thumbnail', help='Update a DPM Route thumbnail')
 @click.pass_context
@@ -100,12 +103,12 @@ def update_thumbnail(ctx: click.Context, route_name: str, thumbnail_file: click.
     route = client.get_route(route_name)
     if route is not None:
         click.echo(f"Updating thumbnail for route '{route_name}'...")
-        try:
-            thumbnail = client.update_route_thumbnail(route_name, thumbnail_file)
+        thumbnail = client.update_route_thumbnail(route_name, thumbnail_file)
+        if isinstance(thumbnail, models.ErrorResponse):
+            click.echo(f"{wrn} Error updating thumbnail:")
+            echoerr(thumbnail)
+        else:
             click.echo(f"Thumbnail updated successfully for route '{route_name}'!")
-        except Exception as e:
-            click.echo(f"ERROR: Failed to update thumbnail for route '{route_name}': {e}")
-            raise
     else:
         click.echo(f"Route '{route_name}' not found!")
         
