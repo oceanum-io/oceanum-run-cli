@@ -1,6 +1,6 @@
 stages:
-  - build
   - test
+  - build
 
 variables:
   IMAGE: 'gcr.io/oceanum-registry/oceanum-run-cli'
@@ -20,20 +20,6 @@ variables:
     DOCKER_HOST: "tcp://docker:2375"
     DOCKER_DRIVER: "overlay2"
 
-build:image:
-  <<: *docker-job
-  stage: build
-  script: |
-    set -e
-    docker buildx create --use --driver docker-container 
-    docker buildx build \
-      --secret id=token,env=CI_JOB_TOKEN \
-      --push \
-      -t $IMAGE:$CI_COMMIT_REF_NAME\
-      --cache-from type=registry,ref=$IMAGE:buildcache \
-      --cache-to type=registry,ref=$IMAGE:buildcache,mode=max \
-      .
-
 .unittests: &unittests
   stage: test
   variables:
@@ -42,6 +28,7 @@ build:image:
     - oceanum-dev-runner
   script: |
     set -e
+    apt update && apt install -y git gdal-bin gdal-data libgdal-dev
     git clone --branch entry-points-cli --depth=1 https://gitlab.com/oceanum/oceanum-io/oceanum-python.git
     pip install ./oceanum-python
     pip install .
@@ -65,3 +52,17 @@ test:unittests-py3.10:
   needs:
     - job: test:unittests-py3.11
       optional: true
+
+build:image:
+  <<: *docker-job
+  stage: build
+  script: |
+    set -e
+    docker buildx create --use --driver docker-container 
+    docker buildx build \
+      --secret id=token,env=CI_JOB_TOKEN \
+      --push \
+      -t $IMAGE:$CI_COMMIT_REF_NAME\
+      --cache-from type=registry,ref=$IMAGE:buildcache \
+      --cache-to type=registry,ref=$IMAGE:buildcache,mode=max \
+      .
