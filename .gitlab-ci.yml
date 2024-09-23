@@ -31,8 +31,7 @@ variables:
     pip install ./oceanum-python
     pip install .
     pip install pytest pytest-cov
-    cd oceanum-run-cli
-    pytest --cov oceanum-run-cli
+    pytest --cov oceanum-run-cli tests/
     pip freeze
 
 test:unittests-py3.12:
