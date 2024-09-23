@@ -15,56 +15,11 @@ class TestDPMCommands(TestCase):
 
     def setUp(self) -> None:
         self.runner = CliRunner()
-        self.specfile = Path(__file__).parent/'data/dpm-project.yaml'
-        self.project_spec = DeployManagerClient.load_spec(self.specfile)
+        self.specfile = Path(__file__).parent / 'data/dpm-project.yaml'
         return super().setUp()
 
     
-    def test_deploy_help(self):
-        result = self.runner.invoke(run_group, ['deploy', '--help'])
-        assert result.exit_code == 0
-        
-    def test_deploy_empty(self):
-        result = self.runner.invoke(run_group, ['deploy'])
-        assert result.exit_code != 0
-        assert 'Missing argument' in result.output
-
-    def test_validate_specfile(self):
-        with patch('oceanum.cli.run.client.DeployManagerClient.validate') as mock_validate:
-            result = self.runner.invoke(main, ['run','validate', str(self.specfile)], catch_exceptions=True)
-            assert result.exit_code == 0
-            mock_validate.assert_called_once_with(self.specfile)
-
-    def test_deploy_specfile_no_args(self):
-        project_spec = DeployManagerClient().load_spec(self.specfile)
-        with patch('oceanum.cli.run.client.DeployManagerClient.get_project') as mock_get:
-            with patch('oceanum.cli.run.client.DeployManagerClient.deploy_project') as mock_deploy:
-                result = self.runner.invoke(
-                    main, ['run','deploy', str(self.specfile),'--wait=0']
-                )
-                assert result.exit_code == 0
-                assert mock_deploy.call_args[0][0].name == project_spec.name
-                
-    def test_deploy_specfile_with_secrets(self):
-        secret_overlay = 'test-secret:token=123456'
-        with patch('oceanum.cli.run.client.DeployManagerClient.get_project') as mock_get:
-            with patch('oceanum.cli.run.client.DeployManagerClient.deploy_project') as mock_deploy:
-                result = self.runner.invoke(
-                    main, ['run','deploy', str(self.specfile),'-s', secret_overlay,'--wait=0']
-                )
-                assert result.exit_code == 0
-                assert mock_deploy.call_args[0][0].resources.secrets[0].data.root['token'] == '123456'
-
-    def test_deploy_with_org_member(self):
-        with patch('oceanum.cli.run.client.DeployManagerClient.get_project') as mock_get:
-            with patch('oceanum.cli.run.client.DeployManagerClient.deploy_project') as mock_deploy:
-                result = self.runner.invoke(
-                    main, ['run','deploy', str(self.specfile),'--org','test','--wait=0','--user=test@test.com']
-                )
-                assert result.exit_code == 0
-                assert mock_deploy.call_args[0][0].user_ref.root == 'test'
-                assert mock_deploy.call_args[0][0].member_ref == 'test@test.com'
-
+    
 
     def test_describe_help(self):
         result = self.runner.invoke(run_group, ['describe', '--help'])

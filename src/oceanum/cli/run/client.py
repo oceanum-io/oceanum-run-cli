@@ -271,10 +271,15 @@ class DeployManagerClient:
         return True
     
     @classmethod
-    def load_spec(cls, specfile: Path) -> models.ProjectSpec:
-        with specfile.open() as f:
-            spec_dict = yaml.safe_load(f)
-        return models.ProjectSpec(**spec_dict)
+    def load_spec(cls, specfile: str) -> models.ProjectSpec|models.ErrorResponse:
+        try:
+            with Path(specfile).open() as f:
+                spec_dict = yaml.safe_load(f)
+            return models.ProjectSpec(**spec_dict)
+        except FileNotFoundError as e:
+            return models.ErrorResponse(detail=f"Specfile not found: {specfile}")
+        except ValidationError as e:
+            return models.ErrorResponse(detail=e.errors()) #type: ignore
     
     def deploy_project(self, spec: models.ProjectSpec) -> models.ProjectSchema | models.ErrorResponse:
         payload = dump_with_secrets(spec)
@@ -312,16 +317,13 @@ class DeployManagerClient:
         else:
             return errs
     
-    def get_project(self, project_name: str, show_error=True, **filters) -> models.ProjectSchema|models.ErrorResponse:
+    def get_project(self, project_name: str, **filters) -> models.ProjectSchema|models.ErrorResponse:
         """
         Try to get a project by name and org/user filters,
         when the project is not found, print the error message and return None
         """
         response, errs = self._get(f'projects/{project_name}', params=filters or None)
-        if not errs:
-            return models.ProjectSchema(**response.json())
-        else:
-            return errs
+        return errs if errs else models.ProjectSchema(**response.json())
     
     def list_routes(self, **filters) -> list[models.RouteSchema] | models.ErrorResponse:
         response, errs = self._get('routes', params=filters or None)
@@ -339,9 +341,16 @@ class DeployManagerClient:
         response, errs = self._post(f'routes/{route_name}/thumbnail', files=files)
         return errs if errs else models.RouteThumbnailSchema(**response.json())
     
-    def validate(self, specfile: Path) -> models.ProjectSpec | models.ErrorResponse:
-        with specfile.open() as f:
-            spec_dict = yaml.safe_load(f)
-        
-        response, errs = self._post('validate', json=spec_dict)
-        return errs if errs else models.ProjectSpec(**response.json())
+    def validate(self, specfile: str) -> models.ProjectSpec | models.ErrorResponse:
+        resp = self.load_spec(specfile)
+        if isinstance(resp, models.ErrorResponse):
+            return resp
+        else:
+            spec_dict = resp.model_dump(
+                exclude_none=True,
+                exclude_unset=True,
+                by_alias=True,
+                mode='python'
+            )
+            response, errs = self._post('validate', json=spec_dict)
+            return errs if errs else models.ProjectSpec(**response.json())

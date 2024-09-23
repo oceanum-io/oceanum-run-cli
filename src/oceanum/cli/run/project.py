@@ -13,11 +13,11 @@ from oceanum.cli.auth import login_required
 from .client import DeployManagerClient
 from .main import list_group, describe_group, delete, run_group, update_group
 from . import models
-from .utils import spin, chk, err, wrn, key, echoerr, merge_secrets
-
-@update_group.group(name='project', help='Update DPM Project resources')
-def update_project_group():
-    pass
+from .utils import (
+    spin, chk, err, wrn, key, info, echoerr, merge_secrets,
+    project_status_color as psc,
+    stage_status_color as ssc,
+)
 
 name_arguement = click.argument('name', type=str)
 name_option = click.option('--name', help='Set the resource name', required=False, type=str)
@@ -44,36 +44,12 @@ def list_projects(ctx: click.Context, search: str|None, org: str|None, user: str
         k: v for k, v in filters.items() if v is not None
     })
 
-    def _status_color(status: str) -> str:
-        if status == 'ready':
-            return click.style(status.upper(), fg='green')
-        elif status == 'degraded':
-            return click.style(status.upper(), fg='yellow')
-        elif status == 'updating':
-            return click.style(status.upper(), fg='cyan')
-        elif status == 'error':
-            return click.style(status.upper(), fg='red')
-        else:
-            return click.style(status.upper(), fg='white')
-        
-    def _color_stage_status(stage: dict) -> str:
-        if stage['status'] == 'healthy':
-            return click.style(stage['name'], fg='green')
-        elif stage['status'] == 'degraded':
-            return click.style(stage['name'], fg='yellow')
-        elif stage['status'] == 'error':
-            return click.style(stage['name'], fg='red')
-        elif stage['status'] == 'updating':
-            return click.style(stage['name'], fg='cyan')
-        else:
-            return stage['name']
-
     fields = [
         RenderField(label='Name', path='$.name'),
         RenderField(label='Org.', path='$.org'),
         RenderField(label='Rev.', path='$.last_revision.number'),
-        RenderField(label='Status', path='$.status', mod=_status_color),
-        RenderField(label='Stages', path='$.stages.*', mod=_color_stage_status),
+        RenderField(label='Status', path='$.status', mod=psc),
+        RenderField(label='Stages', path='$.stages.*', mod=ssc),
     ]
         
     if not projects:
@@ -97,11 +73,9 @@ def validate_project(ctx: click.Context, specfile: click.Path):
     if isinstance(response, models.ErrorResponse):
         click.echo(f" {err} Validation failed!")
         echoerr(response)
-    elif isinstance(response, models.ProjectSpec):
-        click.echo(f' {chk} OK! Project Spec file is valid!')
+        sys.exit(1)
     else:
-        click.echo(f" {err} Could not validate the Spec at this time!")
-        click.echo(f" {wrn} {response}")
+        click.echo(f' {chk} OK! Project Spec file is valid!')
 
 @run_group.command(name='deploy', help='Deploy a DPM Project Specfile')
 @name_option
@@ -111,7 +85,7 @@ def validate_project(ctx: click.Context, specfile: click.Path):
 # Add option to allow passing secrets to the specfile, this will be used to replace placeholders
 # can be multiple, e.g. --secret secret-1:key1=value1,key2=value2 --secret secret-2:key2=value2
 @click.option('-s','--secrets',help='Replace existing secret data values, i.e secret-name:key1=value1,key2=value2', multiple=True)
-@click.argument('specfile', type=click.Path(exists=True))
+@click.argument('specfile', type=click.Path(exists=True, dir_okay=False, resolve_path=True))
 @click.pass_context
 @login_required
 def deploy_project(
@@ -124,16 +98,18 @@ def deploy_project(
     secrets: list[str]
 ):
 
-    
-
     client = DeployManagerClient(ctx)
-     
-    project_spec = client.load_spec(Path(str(specfile)))
-    if name:
+    project_spec = client.load_spec(str(specfile))
+    if isinstance(project_spec, models.ErrorResponse):
+        click.echo(f" {err} Failed to load project spec file!")
+        echoerr(project_spec)
+        sys.exit(1)
+
+    if name is not None:
         project_spec.name = name
     if org is not None:
         project_spec.user_ref = models.UserRef(org)
-    if user:
+    if user is not None:
         project_spec.member_ref = user
 
     if secrets:
@@ -142,6 +118,7 @@ def deploy_project(
 
     user_org = getattr(project_spec.user_ref, 'root', None) or ctx.obj.token.active_org
     user_email = project_spec.member_ref or ctx.obj.token.email
+    
     get_params = {
         'project_name': project_spec.name,
         'org': user_org,
@@ -149,10 +126,17 @@ def deploy_project(
     }
     project = client.get_project(**get_params)
     click.echo()
+
     if isinstance(project, models.ProjectSchema):
         click.echo(f" {spin} Updating existing DPM Project:")
     else:
-        click.echo(f" {spin} Deploying NEW DPM Project:")
+        if 'not found' in str(project.detail).lower():
+            click.echo(f" {spin} Deploying NEW DPM Project:")
+        else:
+            click.echo(f" {err} Could not deploy project!")
+            echoerr(project)
+            sys.exit(1)
+
     click.echo()
     click.echo(f'  Project Name: {project_spec.name}')
     click.echo(f"  Organization: {getattr(user_org, 'root', user_org)}")
@@ -160,27 +144,20 @@ def deploy_project(
     click.echo()
     click.echo('Safe to Ctrl+C at any time...')
     click.echo()
-    try:
-        project = client.deploy_project(project_spec)
-        if isinstance(project, models.ErrorResponse):
-            click.echo(f" {err} Deployment failed!")
-            click.echo(f" {wrn} {project.detail}")
-            return
-        else:
-            click.echo(f" {chk} Project '{project.name}' updated successfully!")
-    except requests.exceptions.HTTPError as e:
+    project = client.deploy_project(project_spec)
+    if isinstance(project, models.ErrorResponse):
         click.echo(f" {err} Deployment failed!")
-        click.echo(f" {wrn} {e}")
+        click.echo(f" {wrn} {project.detail}")
+        sys.exit(1)
+    project = client.get_project(**get_params)
+    if isinstance(project, models.ProjectSchema) and project.last_revision is not None:
+        click.echo(f" {chk} Revision #{project.last_revision.number} created successfully!")
+        if wait:
+            click.echo(f' {spin} Waiting for project to be deployed...')
+            client.wait_project_deployment(**get_params)
     else:
-        project = client.get_project(**get_params)
-        if isinstance(project, models.ProjectSchema) and project.last_revision is not None:
-            click.echo(f" {chk} Revision #{project.last_revision.number} created successfully!")
-            if wait:
-                click.echo(f' {spin} Waiting for project to be deployed...')
-                client.wait_project_deployment(**get_params)
-        else:
-            click.echo(f" {err} Could not retrieve project details!")
-            click.echo(f" {wrn} Please check the project status in the DPM console!")
+        click.echo(f" {err} Could not retrieve project details!")
+        click.echo(f" {wrn} Please check the project status in the DPM console!")
 
 @delete.command(name='project')
 @click.argument('project_name', type=str)
@@ -200,12 +177,20 @@ def delete_project(ctx: click.Context, project_name: str, org: str|None, user:st
             f"Owner: {project.owner}{linesep}"\
             f"{linesep}"\
             "This will attempt to remove all deployed resources for this project! Are you sure?",
-            abort=True)
-        client.delete_project(project_name, org=org, user=user)
-        click.echo(f'Project {project_name} deleted! Deployed resources will be removed shortly...')
+            abort=True
+        )
+        response = client.delete_project(project_name, org=org, user=user)
+        if isinstance(response, models.ErrorResponse):
+            click.echo(f" {err} Failed to delete existing project!")
+            echoerr(response)
+            sys.exit(1)
+        else:
+            click.echo(f' {chk} Project {project_name} deleted successfuly!')
+            click.echo(f' {info} Deployed resources will be removed shortly...')
     else:
         click.echo(f" {err} Failed to delete project '{project_name}'!")
         echoerr(project)
+        sys.exit(1)
 
 @describe_group.command(name='project', help='Describe a DPM Project')
 @click.option('--show-spec', help='Show project spec', default=False, type=bool, is_flag=True)
@@ -317,50 +302,38 @@ def describe_project(ctx: click.Context, project_name: str, org: str, user:str, 
     if isinstance(project, models.ErrorResponse):
         click.echo(f" {err} Could not describe project!")
         echoerr(project)
+        sys.exit(1)
 
-@update_project_group.command(name='description', help='Update project description')
+@update_group.command(name='project', help='Update Project parameters')
 @click.argument('project_name', type=str)
 @project_org_option
 @project_user_option
-@click.argument('description', type=str)
+@click.option('--description', help='Update project description', default=None, type=str)
+@click.option('--active', help='Update project status', default=None, type=bool)
 @click.pass_context
-def update_description(ctx: click.Context, project_name: str, description: str, org: str, user:str):
+def update_project(ctx: click.Context, project_name: str, description: str, org: str, user:str, active: bool):
     client = DeployManagerClient(ctx)
     project = client.get_project(project_name, org=org, user=user)
+    ops = []
     if isinstance(project, models.ProjectSchema):
         project.description = description
-        op = models.JSONPatchOpSchema(
-            op=models.Op('replace'),
-            path='/description',
-            value=description
-        )
-        client.patch_project(project.name, [op])
-        click.echo(f"Project '{project_name}' description updated!")
-    else:
-        click.echo(f" {err} Could not update project description!")
-        echoerr(project)
+        if description:
+            ops.append(models.JSONPatchOpSchema(
+                op=models.Op('replace'),
+                path='/description',
+                value=description
+            ))
+        if active is not None:
+            ops.append(models.JSONPatchOpSchema(
+                op=models.Op('replace'),
+                path='/active',
+                value=active
+            ))
+        project = client.patch_project(project.name, ops)
+        if isinstance(project, models.ProjectSchema):
+            click.echo(f"Project '{project_name}' description updated!")
 
-@update_project_group.command(name='active', help='Update project status')
-@click.argument('project_name', type=str)
-@click.argument('active', type=bool)
-@click.pass_context
-@login_required
-def update_active(ctx: click.Context, project_name: str, active: bool):
-    client = DeployManagerClient(ctx)
-    project = client.get_project(project_name)
-    if isinstance(project, models.ProjectSchema):
-        op = models.JSONPatchOpSchema(
-            op=models.Op('replace'),
-            path='/active',
-            value=active
-        )
-        client.patch_project(project.name, [op])
-        if active:
-            click.echo(f"Project '{project_name}' activated!")
-            click.echo(f"Deployed resources will be available shortly!")
-            client.wait_project_deployment(project_name=project_name)
-        else:
-            click.echo(f"Project '{project_name}' deactivated, deployed resources will be removed shortly!")
-    else:
-        click.echo(f" {err} Could not update project status!")
+    if isinstance(project, models.ErrorResponse):
+        click.echo(f" {err} Failed to update project description!")
         echoerr(project)
+        sys.exit(1)

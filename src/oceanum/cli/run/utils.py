@@ -17,6 +17,8 @@ chk = click.style('\u2713', fg='green')
 
 wrn = click.style('\u26A0', fg='yellow')
 
+info = click.style('\U0001F6C8', fg='cyan')
+
 def format_route_status(status: str) -> str:
     if status == 'online':
         return click.style(status.upper(), fg='green')
@@ -31,6 +33,32 @@ def format_route_status(status: str) -> str:
     else:
         return status
     
+
+def project_status_color(status: str) -> str:
+    if status == 'ready':
+        return click.style(status.upper(), fg='green')
+    elif status == 'degraded':
+        return click.style(status.upper(), fg='yellow')
+    elif status == 'updating':
+        return click.style(status.upper(), fg='cyan')
+    elif status == 'error':
+        return click.style(status.upper(), fg='red')
+    else:
+        return click.style(status.upper(), fg='white')
+        
+def stage_status_color(stage: dict) -> str:
+    if stage['status'] == 'healthy':
+        return click.style(stage['name'], fg='green')
+    elif stage['status'] == 'degraded':
+        return click.style(stage['name'], fg='yellow')
+    elif stage['status'] == 'error':
+        return click.style(stage['name'], fg='red')
+    elif stage['status'] == 'updating':
+        return click.style(stage['name'], fg='cyan')
+    else:
+        return stage['name']
+
+
 def echoerr(error: ErrorResponse):
     if isinstance(error.detail, dict):
         for key, value in error.detail.items():
