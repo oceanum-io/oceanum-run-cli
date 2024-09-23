@@ -30,8 +30,9 @@ variables:
     git clone --branch entry-points-cli --depth=1 https://gitlab-ci-token:$CI_JOB_TOKEN@gitlab.com/oceanum/oceanum-io/oceanum-python.git
     pip install ./oceanum-python
     pip install .
-    pip freeze
+    pip install pytest pytest-cov
     pytest --cov oceanum-run-cli
+    pip freeze
 
 test:unittests-py3.12:
   <<: *unittests
