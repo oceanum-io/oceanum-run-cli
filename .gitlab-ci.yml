@@ -1,0 +1,67 @@
+stages:
+  - build
+  - test
+  #- deploy
+
+  IMAGE: 'gcr.io/oceanum-registry/oceanum-run-cli'
+
+.docker-job: &docker-job
+  image: docker:20.10.16
+  services:
+    - name: docker:20.10.16-dind
+      alias: docker
+      entrypoint: [dockerd]
+  before_script:
+    - while ! docker ps; do sleep 1; done;
+  tags: 
+    - oceanum-dev-runner
+  variables:
+    DOCKER_TLS_CERTDIR: ''
+    DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_DRIVER: "overlay2"
+
+build:image:
+  <<: *docker-job
+  stage: build
+  script: |
+    set -e
+    docker buildx create --use --driver docker-container 
+    docker buildx build \
+      --secret id=token,env=CI_JOB_TOKEN \
+      --push \
+      -t $IMAGE:$CI_COMMIT_REF_NAME\
+      --cache-from type=registry,ref=$IMAGE:buildcache \
+      --cache-to type=registry,ref=$IMAGE:buildcache,mode=max \
+      .
+
+.unittests: &unittests
+  stage: test
+  variables:
+    GITLAB_TOKEN: $CI_JOB_TOKEN
+  tags:
+    - oceanum-dev-runner
+  script: |
+    set -e
+    git clone --branch entry-points-cli --depth=1 https://gitlab.com/oceanum/oceanum-io/oceanum-python.git
+    pip install ./oceanum-python
+    pip install .
+    pip freeze
+    pytest --cov oceanum-run-cli
+
+test:unittests-py3.12:
+  <<: *unittests
+  image: python:3.12-slim
+
+test:unittests-py3.11:
+  <<: *unittests
+  image: python:3.11-slim
+  needs:
+    - job: test:unittests-py3.12
+      optional: true
+
+test:unittests-py3.10:
+  <<: *unittests
+  image: python:3.10-slim
+  needs:
+    - job: test:unittests-py3.11
+      optional: true
