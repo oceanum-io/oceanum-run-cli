@@ -22,14 +22,12 @@ variables:
 
 .unittests: &unittests
   stage: test
-  variables:
-    GITLAB_TOKEN: $CI_JOB_TOKEN
   tags:
     - oceanum-dev-runner
   script: |
     set -e
     apt update && apt install -y git gdal-bin gdal-data libgdal-dev
-    git clone --branch entry-points-cli --depth=1 https://gitlab.com/oceanum/oceanum-io/oceanum-python.git
+    git clone --branch entry-points-cli --depth=1 https://gitlab-ci-token:$CI_JOB_TOKEN@gitlab.com/oceanum/oceanum-io/oceanum-python.git
     pip install ./oceanum-python
     pip install .
     pip freeze
