@@ -24,6 +24,8 @@ variables:
   stage: test
   tags:
     - oceanum-dev-runner
+  variables:
+    OCENAUM_DOMAIN: 'oceanum.test'
   script: |
     set -e
     apt update && apt install -y git gdal-bin gdal-data libgdal-dev
