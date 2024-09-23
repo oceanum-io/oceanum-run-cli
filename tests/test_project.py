@@ -246,3 +246,91 @@ class TestDeployProject(TestCase):
                 assert result.exit_code == 0
                 assert mock_deploy.call_args[0][0].user_ref.root == 'test'
                 assert mock_deploy.call_args[0][0].member_ref == 'test@test.com'
+
+
+class TestDescribeProject(TestCase):
+    def setUp(self) -> None:
+        self.full_schema = models.ProjectSchema(
+            routes=[
+                models.RouteSchema(
+                    name='test-route',
+                    org='test-org',
+                    username='test-user',
+                    display_name='test-route',
+                    created_at=datetime.now().replace(tzinfo=timezone.utc),
+                    project='test-project',
+                    stage='test-stage',
+                    status='active',
+                    url='http://test-route',
+                    custom_domains=['test-domain'],
+                )
+            ],
+            stages=[
+                models.StageSchema(
+                    project_id=2,
+                    updated_at=datetime.now().replace(tzinfo=timezone.utc),
+                    name='test-stage',
+                )
+            ],
+            builds=[
+                models.BuildSchema(
+                    name='test-build',
+                    workflow_ref='test-workflow',
+                    project_id=2,
+                    image_digest=models.ImageDigest('test-digest'),
+                    commit_sha=models.CommitSha('test-sha'),
+                    stage='test-stage',
+                    status='active',
+                    updated_at=datetime.now().replace(tzinfo=timezone.utc),
+                )
+            ],
+            last_revision=models.SpecRevisionSchema(
+                spec=models.ProjectSpec(
+                    name='test-project',
+                    userRef=models.UserRef('test-user'),
+                    memberRef='test-member@member.ref',
+                ),
+                created_at=datetime.now().replace(tzinfo=timezone.utc),
+                number=1,
+                status='active',
+                author='test-user',
+            ),
+            name='test-project',
+            org='test-org',
+            owner='test-user',
+            created_at=datetime.now().replace(tzinfo=timezone.utc),
+            description='test-description',
+            status='healthy',
+        )
+
+    def test_describe_help(self):
+        result = runner.invoke(main, ['run', 'describe', 'project', '--help'])
+        assert result.exit_code == 0
+
+    def test_describe_project_not_found(self):
+        response = MagicMock(status_code=404)
+        response.json.return_value = {'detail': 'not found!'}
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError('404')
+        with patch('requests.request', return_value=response) as mock_request:
+            result = runner.invoke(main, ['run', 'describe', 'project', 'some-random-project'])
+            assert result.exit_code == 1
+            assert mock_request.call_count == 1
+            assert 'not found!' in result.output
+
+    def test_describe_project(self):
+        with patch('oceanum.cli.run.client.DeployManagerClient.get_project', return_value=self.full_schema) as mock_get:
+            result = runner.invoke(main, ['run', 'describe', 'project', 'test-project'])
+            assert result.exit_code == 0
+            assert 'healthy' in result.output
+
+    def test_describe_project_show_spec(self):
+        with patch('oceanum.cli.run.client.DeployManagerClient.get_project', return_value=self.full_schema) as mock_get:
+            result = runner.invoke(main, ['run', 'describe', 'project', 'test-project', '--show-spec'])
+            assert result.exit_code == 0
+            assert 'test-project' in result.output
+
+    def test_describe_project_only_spec(self):
+        with patch('oceanum.cli.run.client.DeployManagerClient.get_project', return_value=self.full_schema) as mock_get:
+            result = runner.invoke(main, ['run', 'describe', 'project', 'test-project', '--only-spec'])
+            assert result.exit_code == 0
+            assert 'test-project' in result.output
