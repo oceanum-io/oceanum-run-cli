@@ -69,7 +69,7 @@ def list_projects(ctx: click.Context, search: str|None, org: str|None, user: str
 def validate_project(ctx: click.Context, specfile: click.Path):
     click.echo(f' {spin} Validating DPM Project Spec file...')
     client = DeployManagerClient(ctx)
-    response = client.validate(Path(str(specfile)))
+    response = client.validate(str(specfile))
     if isinstance(response, models.ErrorResponse):
         click.echo(f" {err} Validation failed!")
         echoerr(response)
@@ -118,7 +118,7 @@ def deploy_project(
 
     user_org = getattr(project_spec.user_ref, 'root', None) or ctx.obj.token.active_org
     user_email = project_spec.member_ref or ctx.obj.token.email
-    
+
     get_params = {
         'project_name': project_spec.name,
         'org': user_org,
