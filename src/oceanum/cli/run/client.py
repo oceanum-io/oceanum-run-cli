@@ -279,7 +279,12 @@ class DeployManagerClient:
         except FileNotFoundError as e:
             return models.ErrorResponse(detail=f"Specfile not found: {specfile}")
         except ValidationError as e:
-            return models.ErrorResponse(detail=e.errors()) #type: ignore
+            return models.ErrorResponse(detail=[
+                models.ValidationErrorDetail(
+                    loc=[str(v) for v in e['loc']], 
+                    msg=e['msg'], 
+                    type=e['type']) for e in e.errors()
+                ])
     
     def deploy_project(self, spec: models.ProjectSpec) -> models.ProjectSchema | models.ErrorResponse:
         payload = dump_with_secrets(spec)
