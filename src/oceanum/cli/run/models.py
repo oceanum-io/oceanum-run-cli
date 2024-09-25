@@ -884,9 +884,8 @@ class SourceRefParams(BaseModel):
         pattern='^[a-z]([a-z0-9-]+[a-z0-9])?$',
         title='Source Repository Name',
     )
-    repo_ref: Optional[str] = Field(
+    branch: Optional[str] = Field(
         default=None,
-        alias='repoRef',
         description='The branch to use for cloning the Source Repository and monitor for Git push-events, can be overwritten at stage level, defaults to the Source Repository default branch',
         title='Source Repository Reference Branch',
     )
@@ -926,6 +925,7 @@ class SourceRepositorySpec(BaseModel):
     )
     default_branch: str = Field(
         default='main',
+        alias='defaultBranch',
         description='The default branch to use for the source repository',
         max_length=24,
         title='Default Branch',
