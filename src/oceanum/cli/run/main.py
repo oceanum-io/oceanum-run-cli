@@ -20,3 +20,11 @@ def delete():
 @run_group.group(name='update',help='Update DPM resources')
 def update_group():
     pass
+
+@run_group.group(name='create',help='Create DPM resources')
+def create_group():
+    pass
+
+@run_group.group(name='allow',help='Manage DPM resources permissions')
+def allow_group():
+    pass

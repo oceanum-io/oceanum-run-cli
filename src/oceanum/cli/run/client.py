@@ -257,6 +257,8 @@ class DeployManagerClient:
                 return models.ErrorResponse(detail=response.text)
             except ValidationError as e:
                 return models.ErrorResponse(detail=response.json())
+            except Exception as e:
+                return models.ErrorResponse(detail=str(e))
     
     def wait_project_deployment(self, **params) -> bool:
         start = time.time()
@@ -359,3 +361,12 @@ class DeployManagerClient:
             )
             response, errs = self._post('validate', json=spec_dict)
             return errs if errs else models.ProjectSpec(**response.json())
+        
+    def allow_project(self, project_name: str, permissions: models.ProjectPermissionSchema, **filters) -> models.ConfirmationResponse | models.ErrorResponse:
+        response, errs = self._post(
+            f'projects/{project_name}/permission',
+            params=filters or None, 
+            json=permissions.model_dump()
+        )
+        
+        return errs if errs else models.ConfirmationResponse(**response.json())

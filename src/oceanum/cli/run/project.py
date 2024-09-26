@@ -11,7 +11,7 @@ from oceanum.cli.common.renderer import Renderer, RenderField
 
 from oceanum.cli.auth import login_required
 from .client import DeployManagerClient
-from .main import list_group, describe_group, delete, run_group, update_group
+from .main import list_group, describe_group, delete, run_group, update_group, allow_group
 from . import models
 from .utils import (
     spin, chk, err, wrn, key, info, echoerr, merge_secrets,
@@ -336,4 +336,33 @@ def update_project(ctx: click.Context, project_name: str, description: str, org:
     if isinstance(project, models.ErrorResponse):
         click.echo(f" {err} Failed to update project description!")
         echoerr(project)
+        sys.exit(1)
+        
+
+@allow_group.command(name='project')
+@click.argument('project_name', type=str, required=True)
+@click.argument('subject', type=str, required=True)
+@project_org_option
+@project_user_option
+@click.option('-v','--view', help='Allow to see the project', default=None, type=bool, is_flag=True)
+@click.option('-c','--change', help='Allow to edit the project, implies --view', default=None, type=bool, is_flag=True)
+@click.option('-d','--delete', help='Allow delete project, implies --view and --change', default=None, type=bool, is_flag=True)
+@click.pass_context
+def allow_project(ctx: click.Context, project_name: str, org: str, user:str, view: bool, change: bool, delete: bool, subject: str):
+    client = DeployManagerClient(ctx)
+    response = client.get_project(project_name, org=org, user=user)
+    if isinstance(response, models.ProjectSchema):
+        permission = models.ProjectPermissionSchema(
+            view=bool(view or change or delete),
+            change=bool(change or delete),
+            delete=bool(delete),
+            subject=subject,
+        )
+        response = client.allow_project(response.name, permission)
+        if isinstance(response, models.ConfirmationResponse):
+            click.echo(f"{chk} Permissions for project '{project_name}' set successfully!")
+            click.echo(f"{info} {response.detail}")
+    if isinstance(response, models.ErrorResponse):
+        click.echo(f" {err} Failed to grant permission to project!")
+        echoerr(response)
         sys.exit(1)
