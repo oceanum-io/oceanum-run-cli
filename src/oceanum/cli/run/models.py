@@ -1305,18 +1305,18 @@ class ConfirmationResponse(BaseModel):
     )
 
 
-class ProjectPermissionSchema(BaseModel):
-    view: bool = Field(default=False, description='Can view the project', title='View')
-    change: bool = Field(
-        default=False, description='Can change the project', title='change'
-    )
-    delete: bool = Field(
-        default=False, description='Can delete the project', title='delete'
-    )
+class PermissionsSchema(BaseModel):
     subject: str = Field(
         ...,
         description="The subject of the permission an user's email or an org's name",
         title='Subject',
+    )
+    view: bool = Field(default=False, description='Can view the resource', title='View')
+    change: bool = Field(
+        default=False, description='Can change the resource', title='change'
+    )
+    delete: bool = Field(
+        default=False, description='Can delete the resource', title='delete'
     )
 
 

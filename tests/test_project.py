@@ -11,8 +11,7 @@ from click.testing import CliRunner
 from datetime import datetime, timezone
 
 from oceanum.cli.main import main
-from oceanum.cli.common.models import TokenResponse
-from oceanum.cli.run import project, models, client
+from oceanum.cli.run import models, client
 
 runner = CliRunner()
 
@@ -158,7 +157,7 @@ class TestValidateProject(TestCase):
         with patch('oceanum.cli.run.client.DeployManagerClient.validate') as mock_validate:
             result = runner.invoke(main, ['run','validate', str(self.specfile)], catch_exceptions=True)
             assert result.exit_code == 0
-            mock_validate.assert_called_once_with(self.specfile)
+            mock_validate.assert_called_once_with(str(self.specfile))
 
 
 class TestUpdateProject(TestCase):
@@ -334,3 +333,26 @@ class TestDescribeProject(TestCase):
             result = runner.invoke(main, ['run', 'describe', 'project', 'test-project', '--only-spec'])
             assert result.exit_code == 0
             assert 'test-project' in result.output
+
+class TestAllowProject(TestCase):
+    def test_allow_help(self):
+        result = runner.invoke(main, ['run', 'allow', 'project', '--help'])
+        assert result.exit_code == 0
+
+    def test_allow_project_not_found(self):
+        response = MagicMock(status_code=404)
+        response.json.return_value = {'detail': 'not found!'}
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError('404')
+        with patch('requests.request', return_value=response) as mock_request:
+            result = runner.invoke(main, ['run', 'allow', 'project', 'some-random-project','some-user'])
+            assert result.exit_code == 1
+            assert mock_request.call_count == 1
+
+    def test_allow_project(self):
+        post_response = MagicMock(status_code=200)
+        post_response.json.return_value = {'success': True}
+        with patch.object(client.DeployManagerClient, 'get_project', return_value=project_schema) as mock_request:
+            with patch.object(client.DeployManagerClient, '_post', return_value=(post_response, None)) as mock_request:
+                result = runner.invoke(main, ['run', 'allow', 'project', 'test-project','some-user','--change'])
+                assert result.exit_code == 0
+                assert 'success' in result.output

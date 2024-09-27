@@ -362,11 +362,26 @@ class DeployManagerClient:
             response, errs = self._post('validate', json=spec_dict)
             return errs if errs else models.ProjectSpec(**response.json())
         
-    def allow_project(self, project_name: str, permissions: models.ProjectPermissionSchema, **filters) -> models.ConfirmationResponse | models.ErrorResponse:
+    def allow_project(self, 
+        project_name: str, 
+        permissions: models.PermissionsSchema, 
+        **filters
+    ) -> models.ConfirmationResponse | models.ErrorResponse:
         response, errs = self._post(
-            f'projects/{project_name}/permission',
+            f'projects/{project_name}/permissions',
             params=filters or None, 
             json=permissions.model_dump()
         )
-        
+        return errs if errs else models.ConfirmationResponse(**response.json())
+    
+    def allow_route(self, 
+        route_name: str, 
+        permissions: models.PermissionsSchema, 
+        **filters
+    ) -> models.ConfirmationResponse | models.ErrorResponse:
+        response, errs = self._post(
+            f'routes/{route_name}/permissions',
+            params=filters or None, 
+            json=permissions.model_dump()
+        )
         return errs if errs else models.ConfirmationResponse(**response.json())

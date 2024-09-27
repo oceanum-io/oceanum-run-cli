@@ -7,9 +7,9 @@ import requests
 from oceanum.cli.common.renderer import Renderer, output_format_option, RenderField
 from oceanum.cli.auth import login_required
 from . import models
-from .main import list_group, describe_group, update_group
+from .main import list_group, describe_group, update_group, allow_group
 from .client import DeployManagerClient
-from .utils import format_route_status as _frs, wrn, echoerr
+from .utils import format_route_status as _frs, wrn, echoerr, chk, info, err
 
 @update_group.group(name='route', help='Update DPM Routes')
 def update_route():
@@ -112,3 +112,27 @@ def update_thumbnail(ctx: click.Context, route_name: str, thumbnail_file: click.
     else:
         click.echo(f"Route '{route_name}' not found!")
         
+
+@allow_group.command(name='route')
+@click.argument('route_name', type=str, required=True)
+@click.argument('subject', type=str, required=True)
+@click.option('-v','--view', help='Allow to view the route', default=None, type=bool, is_flag=True)
+@click.option('-c','--change', help='Allow to change the route, implies --view', default=None, type=bool, is_flag=True)
+@click.pass_context
+def allow_route(ctx: click.Context, route_name: str, subject: str, view: bool, change: bool):
+    client = DeployManagerClient(ctx)
+    response = client.get_route(route_name)
+    if isinstance(response, models.RouteSchema):
+        permission = models.PermissionsSchema(
+            view=bool(view),
+            change=bool(change),
+            subject=subject,
+        )
+        response = client.allow_route(response.name, permission)
+        if isinstance(response, models.ConfirmationResponse):
+            click.echo(f"{chk} Permissions for route '{route_name}' set successfully!")
+            click.echo(f"{info} {response.detail}")
+    if isinstance(response, models.ErrorResponse):
+        click.echo(f" {err} Failed to grant permission to route!")
+        echoerr(response)
+        sys.exit(1)
