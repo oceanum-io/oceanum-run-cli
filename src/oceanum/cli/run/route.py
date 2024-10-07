@@ -119,6 +119,7 @@ def update_thumbnail(ctx: click.Context, route_name: str, thumbnail_file: click.
 @click.option('-v','--view', help='Allow to view the route', default=None, type=bool, is_flag=True)
 @click.option('-c','--change', help='Allow to change the route, implies --view', default=None, type=bool, is_flag=True)
 @click.pass_context
+@login_required
 def allow_route(ctx: click.Context, route_name: str, subject: str, view: bool, change: bool):
     client = DeployManagerClient(ctx)
     response = client.get_route(route_name)
