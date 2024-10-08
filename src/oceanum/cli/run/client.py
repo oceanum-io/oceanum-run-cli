@@ -357,7 +357,7 @@ class DeployManagerClient:
                 exclude_none=True,
                 exclude_unset=True,
                 by_alias=True,
-                mode='python'
+                mode='json'
             )
             response, errs = self._post('validate', json=spec_dict)
             return errs if errs else models.ProjectSpec(**response.json())
