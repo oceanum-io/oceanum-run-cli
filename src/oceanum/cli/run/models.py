@@ -796,6 +796,92 @@ class SecretRefMounted(BaseModel):
     )
 
 
+class MinReplicas(RootModel[int]):
+    root: int = Field(
+        ...,
+        description='The minimum number of service replicas containers to keep running. Default to 0, however, if metric is cpu or memory, minScale must be greater or equal to 1.',
+        ge=0,
+        title='Minimum Replicas',
+    )
+
+
+class MaxReplicas(RootModel[int]):
+    root: int = Field(
+        ...,
+        description='The maximum number of service replicas containers to scale up to, default to 3',
+        ge=0,
+        title='Maximum Replicas',
+    )
+
+
+class Metric(Enum):
+    """
+    The metric to use for autoscaling. Options are `concurrency` (simultaneous request over `targetWindow` period) or `rps` (requests per second) or `cpu` or `memory`. CPU and Memory target units are millicores and MiB respectivelly. Default to `concurrency`
+    """
+
+    concurrency = 'concurrency'
+    rps = 'rps'
+    cpu = 'cpu'
+    memory = 'memory'
+
+
+class TargetPercentage(RootModel[int]):
+    root: int = Field(
+        ...,
+        description='A percentage for the target metric to reach before starting scaling up. Default to 100%.',
+        ge=0,
+        le=100,
+        title='Target Percentage',
+    )
+
+
+class TargetWindow(RootModel[int]):
+    root: int = Field(
+        ...,
+        description='The target sliding time window in seconds to calculate the metric average. Default to 60 seconds. Minimum 6 seconds and maximum 1 hour.',
+        gt=6,
+        le=3600,
+        title='Target Time Window',
+    )
+
+
+class ServiceAutoscaleSpec(BaseModel):
+    min_replicas: Optional[MinReplicas] = Field(
+        default=None,
+        alias='minReplicas',
+        description='The minimum number of service replicas containers to keep running. Default to 0, however, if metric is cpu or memory, minScale must be greater or equal to 1.',
+        title='Minimum Replicas',
+    )
+    max_replicas: Optional[MaxReplicas] = Field(
+        default=None,
+        alias='maxReplicas',
+        description='The maximum number of service replicas containers to scale up to, default to 3',
+        title='Maximum Replicas',
+    )
+    metric: Optional[Metric] = Field(
+        default=None,
+        description='The metric to use for autoscaling. Options are `concurrency` (simultaneous request over `targetWindow` period) or `rps` (requests per second) or `cpu` or `memory`. CPU and Memory target units are millicores and MiB respectivelly. Default to `concurrency`',
+        title='Metric',
+    )
+    target: Optional[int] = Field(
+        default=None,
+        description='The target value for the metric. Default to 100.',
+        title='Target',
+    )
+    target_percentage: Optional[TargetPercentage] = Field(
+        default=None,
+        alias='targetPercentage',
+        description='A percentage for the target metric to reach before starting scaling up. Default to 100%.',
+        title='Target Percentage',
+    )
+    target_window: Optional[TargetWindow] = Field(
+        default=None,
+        alias='targetWindow',
+        description='The target sliding time window in seconds to calculate the metric average. Default to 60 seconds. Minimum 6 seconds and maximum 1 hour.',
+        title='Target Time Window',
+    )
+
+
 class Port(RootModel[int]):
     root: int = Field(
         ...,
@@ -1804,20 +1890,8 @@ class ContainerCommandRequiredSpec(BaseModel):
         description='List of existing ConfigMaps or Secrets references to mount in the container',
         title='Container Mounts',
     )
-    image: Optional[Union[DockerImageURL, ContainerImageSpec]] = Field(
-        default=None, description='A Public Image Repository URL', title='Public Image'
-    )
-    image_ref: Optional[ImageRef] = Field(
-        default=None,
-        alias='imageRef',
-        description='Image repository from the list of defined Project images to run the container',
-        title='Image Repository Reference',
-    )
-    build_ref: Optional[BuildRef] = Field(
-        default=None,
-        alias='buildRef',
-        description='The build reference from the list of Project builds',
-        title='Image Build reference',
+    image: Union[DockerImageURL, ContainerImageSpec] = Field(
+        ..., description='A Public Image Repository URL', title='Public Image'
     )
     sidecars: Optional[list[ContainerCommandRequiredSpec]] = Field(
         default=None,
@@ -1945,18 +2019,6 @@ class PipelineDefaults(BaseModel):
         default=None,
         description='Image is the container image to run. If the image is a public image, it is resolved using the public image repository. If the image is a private image, it is resolved using the private image repository.',
         title='Container Image',
-    )
-    image_ref: Optional[ImageRef] = Field(
-        default=None,
-        alias='imageRef',
-        description='Image repository from the list of defined Project images to run the container',
-        title='Image Repository Reference',
-    )
-    build_ref: Optional[BuildRef] = Field(
-        default=None,
-        alias='buildRef',
-        description='The build reference from the list of Project builds',
-        title='Image Build reference',
     )
     sidecars: Optional[list[ContainerCommandRequiredSpec]] = Field(
         default=None,
@@ -2108,18 +2170,6 @@ class ServiceOverlay(BaseModel):
     image: Optional[Union[DockerImageURL, ContainerImageSpec]] = Field(
         default=None, description='A Public Image Repository URL', title='Public Image'
     )
-    image_ref: Optional[ImageRef] = Field(
-        default=None,
-        alias='imageRef',
-        description='Image repository from the list of defined Project images to run the container',
-        title='Image Repository Reference',
-    )
-    build_ref: Optional[BuildRef] = Field(
-        default=None,
-        alias='buildRef',
-        description='The build reference from the list of Project builds',
-        title='Image Build reference',
-    )
     sidecars: Optional[list[ContainerCommandRequiredSpec]] = Field(
         default=None,
         description='List of arbitrary sidecar containers to start with the main container',
@@ -2138,11 +2188,10 @@ class ServiceOverlay(BaseModel):
     route: Optional[ServiceRouteSpec] = Field(
         default=None, description="The Service's Route", title='Service Route'
     )
-    scale_to_zero: Optional[bool] = Field(
+    autoscale: Optional[ServiceAutoscaleSpec] = Field(
         default=None,
-        alias='scaleToZero',
-        description='Scale the Service to Zero when there are no requests',
-        title='Scale to Zero',
+        description="The Service's Autoscale parameters",
+        title='Service Autoscale',
     )
 
 
@@ -2188,20 +2237,8 @@ class ServiceSpec(BaseModel):
         description='List of existing ConfigMaps or Secrets references to mount in the container',
         title='Container Mounts',
     )
-    image: Optional[Union[DockerImageURL, ContainerImageSpec]] = Field(
-        default=None, description='A Public Image Repository URL', title='Public Image'
-    )
-    image_ref: Optional[ImageRef] = Field(
-        default=None,
-        alias='imageRef',
-        description='Image repository from the list of defined Project images to run the container',
-        title='Image Repository Reference',
-    )
-    build_ref: Optional[BuildRef] = Field(
-        default=None,
-        alias='buildRef',
-        description='The build reference from the list of Project builds',
-        title='Image Build reference',
+    image: Union[DockerImageURL, ContainerImageSpec] = Field(
+        ..., description='A Public Image Repository URL', title='Public Image'
     )
     sidecars: Optional[list[ContainerCommandRequiredSpec]] = Field(
         default=None,
@@ -2245,11 +2282,10 @@ class ServiceSpec(BaseModel):
         description="The Service's Route",
         title='Service Route',
     )
-    scale_to_zero: bool = Field(
-        default=True,
-        alias='scaleToZero',
-        description='Scale the Service to Zero when there are no requests',
-        title='Scale to Zero',
+    autoscale: Optional[ServiceAutoscaleSpec] = Field(
+        default=None,
+        description="The Service's Autoscale parameters. ",
+        title='Service Autoscale',
     )
 
 
@@ -2281,18 +2317,6 @@ class TaskOverlay(BaseModel):
     )
     image: Optional[Union[DockerImageURL, ContainerImageSpec]] = Field(
         default=None, description='A Public Image Repository URL', title='Public Image'
-    )
-    image_ref: Optional[ImageRef] = Field(
-        default=None,
-        alias='imageRef',
-        description='Image repository from the list of defined Project images to run the container',
-        title='Image Repository Reference',
-    )
-    build_ref: Optional[BuildRef] = Field(
-        default=None,
-        alias='buildRef',
-        description='The build reference from the list of Project builds',
-        title='Image Build reference',
     )
     sidecars: Optional[list[ContainerCommandRequiredSpec]] = Field(
         default=None,
@@ -2350,20 +2374,8 @@ class TaskSpec(BaseModel):
         description='List of existing ConfigMaps or Secrets references to mount in the container',
         title='Container Mounts',
     )
-    image: Optional[Union[DockerImageURL, ContainerImageSpec]] = Field(
-        default=None, description='A Public Image Repository URL', title='Public Image'
-    )
-    image_ref: Optional[ImageRef] = Field(
-        default=None,
-        alias='imageRef',
-        description='Image repository from the list of defined Project images to run the container',
-        title='Image Repository Reference',
-    )
-    build_ref: Optional[BuildRef] = Field(
-        default=None,
-        alias='buildRef',
-        description='The build reference from the list of Project builds',
-        title='Image Build reference',
+    image: Union[DockerImageURL, ContainerImageSpec] = Field(
+        ..., description='A Public Image Repository URL', title='Public Image'
     )
     sidecars: Optional[list[ContainerCommandRequiredSpec]] = Field(
         default=None,
