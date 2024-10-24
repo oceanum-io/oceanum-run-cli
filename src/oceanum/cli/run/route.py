@@ -6,10 +6,12 @@ import requests
 
 from oceanum.cli.common.renderer import Renderer, output_format_option, RenderField
 from oceanum.cli.auth import login_required
+from oceanum.cli.common.symbols import wrn, chk, info, err
 from . import models
 from .main import list_group, describe_group, update_group, allow_group
 from .client import DeployManagerClient
-from .utils import format_route_status as _frs, wrn, echoerr, chk, info, err
+
+from .utils import format_route_status as _frs, echoerr
 
 @update_group.group(name='route', help='Update DPM Routes')
 def update_route():

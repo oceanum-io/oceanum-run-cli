@@ -260,6 +260,18 @@ class ConfigmapParameterRef(BaseModel):
     )
 
 
+class Family(Enum):
+    """
+    The resource family of the resource request, if not provided only cpu and memory will be used for scheduling
+    """
+
+    e2 = 'e2'
+    n2 = 'n2'
+    n2d = 'n2d'
+    c3 = 'c3'
+    c3d = 'c3d'
+
+
 class ContinueOn(BaseModel):
     """
     ContinueOn defines if a pipeline should continue even if a task or step fails/errors. It can be specified if the workflow should continue when the pod errors, fails or both.
@@ -320,6 +332,42 @@ class Frequency(Enum):
     field_weekly = '@weekly'
     field_monthly = '@monthly'
     field_yearly = '@yearly'
+
+
+class CyclicDag(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    start_cycle: AwareDatetime = Field(
+        ...,
+        alias='startCycle',
+        description='The start cycle in UTC of the DAG as an iso8601 string i.e. YYYY-MM-DDTHH:MM:SSZ',
+        title='Startcycle',
+    )
+    end_cycle: AwareDatetime = Field(
+        ...,
+        alias='endCycle',
+        description='The end cycle in UTC of the DAG as an iso8601 string i.e. YYYY-MM-DDTHH:MM:SSZ',
+        title='Endcycle',
+    )
+    frequency: Optional[Frequency] = Field(
+        default=None,
+        description='The frequency occurrence of each DAG cycle, e.g. @hourly, @daily, @weekly, @monthly, @yearly',
+        title='Frequency',
+    )
+    interval: int = Field(
+        default=1,
+        description='The frequency interval multiplier between each DAG cycle',
+        gt=0,
+        title='Interval',
+    )
+    parallel_chunks: int = Field(
+        default=1,
+        alias='parallelChunks',
+        description='The number of concurrent chunks to run in parallel. Defaults to 1. A concurrent chunk will ignore dependencies from previous chunks',
+        gt=0,
+        title='Parallelchunks',
+    )
 
 
 class DockerImageURL(RootModel[str]):
@@ -541,6 +589,16 @@ class Delay(RootModel[str]):
     )
 
 
+class ConcurrencyPolicy(Enum):
+    """
+    ConcurrencyPolicy is the concurrency policy that will be used when scheduled runs overlaps. Allowed values are "Allow", "Forbid", "Replace". Default is "Allow".
+    """
+
+    allow = 'Allow'
+    forbid = 'Forbid'
+    replace = 'Replace'
+
+
 class PipelineCronTrigger(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -576,6 +634,12 @@ class PipelineCronTrigger(BaseModel):
         default='UTC',
         description='Timezone is the timezone against which the cron schedule will be calculated, e.g. "Asia/Tokyo". Default is UTC.',
         title='Timezone',
+    )
+    concurrency_policy: Optional[ConcurrencyPolicy] = Field(
+        default=None,
+        alias='concurrencyPolicy',
+        description='ConcurrencyPolicy is the concurrency policy that will be used when scheduled runs overlaps. Allowed values are "Allow", "Forbid", "Replace". Default is "Allow".',
+        title='Concurrencypolicy',
     )
 
 
@@ -660,47 +724,6 @@ class UserRef(RootModel[str]):
 
 class Quantity(RootModel[Union[str, int, float]]):
     root: Union[str, int, float] = Field(..., title='Quantity')
-
-
-class Family(Enum):
-    """
-    The resource family of the resource request, if not provided only cpu and memory will be used for scheduling
-    """
-
-    e2 = 'e2'
-    n2 = 'n2'
-    n2d = 'n2d'
-    c3 = 'c3'
-    c3d = 'c3d'
-
-
-class ResourceRequests(BaseModel):
-    cpu: Optional[Quantity] = Field(
-        default=None,
-        description='The quantity of CPU resources, if not provided a system default or parent attribute will be applied',
-        title='CPU Quantity',
-    )
-    memory: Optional[Quantity] = Field(
-        default=None,
-        description='The quantity of Memory resources, if not provided a system default or parent attribute will be applied',
-        title='Memory Quantity',
-    )
-    storage: Optional[Quantity] = Field(
-        default=None,
-        description='The quantity of local disk storage required, if not provided, a system default or parent attribute will be applied.',
-        title='Ephemeral Storage Quantity',
-    )
-    family: Optional[Family] = Field(
-        default=None,
-        description='The resource family of the resource request, if not provided only cpu and memory will be used for scheduling',
-        title='Machine Family',
-    )
-    on_demand: bool = Field(
-        default=False,
-        alias='onDemand',
-        description='If the resource request can be scheduled on an on-demand instance. Default is False.',
-        title='On-Demand Instance',
-    )
 
 
 class MaxDuration(RootModel[str]):
@@ -1437,6 +1460,44 @@ class ConfigMapRefMounted(BaseModel):
     )
 
 
+class ContainerResources(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    cpu: Optional[Quantity] = Field(
+        default=None,
+        description='The quantity of CPU resources, if not provided a system default or parent attribute will be applied',
+        title='CPU Quantity',
+    )
+    memory: Optional[Quantity] = Field(
+        default=None,
+        description='The quantity of Memory resources, if not provided a system default or parent attribute will be applied',
+        title='Memory Quantity',
+    )
+    storage: Optional[Quantity] = Field(
+        default=None,
+        description='The quantity of local disk storage required, if not provided, a system default or parent attribute will be applied.',
+        title='Ephemeral Storage Quantity',
+    )
+    family: Optional[Family] = Field(
+        default=None,
+        description='The resource family of the resource request, if not provided only cpu and memory will be used for scheduling',
+        title='Machine Family',
+    )
+    on_demand: Optional[bool] = Field(
+        default=None,
+        alias='onDemand',
+        description='If the resource request can be scheduled on an on-demand instance (recommended for production workloads). Default is False.',
+        title='On-Demand Instance',
+    )
+    node_labels: Optional[dict[str, str]] = Field(
+        default=None,
+        alias='nodeLabels',
+        description='The node-pool labels to match for scheduling the resource request',
+        title='Node Labels',
+    )
+
+
 class EmptyDirVolumeSource(BaseModel):
     """
     Represents an empty directory for a Container. Empty directory volumes support ownership management and SELinux relabeling.
@@ -1720,7 +1781,7 @@ class ContainerBaseSpec(BaseModel):
         title='Container Name',
     )
     description: Optional[str] = Field(default=None, title='Resource Description')
-    resources: Optional[ResourceRequests] = Field(
+    resources: Optional[ContainerResources] = Field(
         default=None,
         description='The machine (CPU, memory, disk) resource-requirements, if not provided a system default or parent resource attribute will be applied',
         title='Container Resources',
@@ -1743,7 +1804,7 @@ class ContainerImageSpec(BaseModel):
         default=None, description='A Public Image Repository URL', title='Public Image'
     )
     description: Optional[str] = Field(default=None, title='Resource Description')
-    resources: Optional[ResourceRequests] = Field(
+    resources: Optional[ContainerResources] = Field(
         default=None,
         description='The machine (CPU, memory, disk) resource-requirements, if not provided a system default or parent resource attribute will be applied',
         title='Container Resources',
@@ -1797,7 +1858,7 @@ class BuildSpec(BaseModel):
         title='Build Name',
     )
     description: Optional[str] = Field(default=None, title='Resource Description')
-    resources: Optional[ResourceRequests] = Field(
+    resources: Optional[ContainerResources] = Field(
         default=None,
         description='The machine (CPU, memory, disk) resource-requirements, if not provided a system default or parent resource attribute will be applied',
         title='Container Resources',
@@ -1877,7 +1938,7 @@ class ContainerCommandRequiredSpec(BaseModel):
         title='Container Name',
     )
     description: Optional[str] = Field(default=None, title='Resource Description')
-    resources: Optional[ResourceRequests] = Field(
+    resources: Optional[ContainerResources] = Field(
         default=None,
         description='The machine (CPU, memory, disk) resource-requirements, if not provided a system default or parent resource attribute will be applied',
         title='Container Resources',
@@ -2002,7 +2063,7 @@ class PipelineDefaults(BaseModel):
         default=None, description='name has no effect here', title='Container Name'
     )
     description: Optional[str] = Field(default=None, title='Resource Description')
-    resources: Optional[ResourceRequests] = Field(
+    resources: Optional[ContainerResources] = Field(
         default=None,
         description='The machine (CPU, memory, disk) resource-requirements, if not provided a system default or parent resource attribute will be applied',
         title='Container Resources',
@@ -2154,7 +2215,7 @@ class ServiceOverlay(BaseModel):
         title='Container Name',
     )
     description: Optional[str] = Field(default=None, title='Resource Description')
-    resources: Optional[ResourceRequests] = Field(
+    resources: Optional[ContainerResources] = Field(
         default=None,
         description='The machine (CPU, memory, disk) resource-requirements, if not provided a system default or parent resource attribute will be applied',
         title='Container Resources',
@@ -2224,7 +2285,7 @@ class ServiceSpec(BaseModel):
         title='Container Name',
     )
     description: Optional[str] = Field(default=None, title='Resource Description')
-    resources: Optional[ResourceRequests] = Field(
+    resources: Optional[ContainerResources] = Field(
         default=None,
         description='The machine (CPU, memory, disk) resource-requirements, if not provided a system default or parent resource attribute will be applied',
         title='Container Resources',
@@ -2302,7 +2363,7 @@ class TaskOverlay(BaseModel):
         title='Container Name',
     )
     description: Optional[str] = Field(default=None, title='Resource Description')
-    resources: Optional[ResourceRequests] = Field(
+    resources: Optional[ContainerResources] = Field(
         default=None,
         description='The machine (CPU, memory, disk) resource-requirements, if not provided a system default or parent resource attribute will be applied',
         title='Container Resources',
@@ -2361,7 +2422,7 @@ class TaskSpec(BaseModel):
         title='Task Name',
     )
     description: Optional[str] = Field(default=None, title='Resource Description')
-    resources: Optional[ResourceRequests] = Field(
+    resources: Optional[ContainerResources] = Field(
         default=None,
         description='The machine (CPU, memory, disk) resource-requirements, if not provided a system default or parent resource attribute will be applied',
         title='Container Resources',
@@ -2414,45 +2475,6 @@ class TaskSpec(BaseModel):
         default=None,
         description="Timeout allows to set the total execution timeout in seconds counting from the Task's start time. If the Task is not completed before the timeout, it will be terminated.",
         title='Timeout',
-    )
-
-
-class CyclicDag(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    start_cycle: AwareDatetime = Field(
-        ...,
-        alias='startCycle',
-        description='The start cycle in UTC of the DAG as an iso8601 string i.e. YYYY-MM-DDTHH:MM:SSZ',
-        title='Startcycle',
-    )
-    end_cycle: AwareDatetime = Field(
-        ...,
-        alias='endCycle',
-        description='The end cycle in UTC of the DAG as an iso8601 string i.e. YYYY-MM-DDTHH:MM:SSZ',
-        title='Endcycle',
-    )
-    frequency: Optional[Frequency] = Field(
-        default=None,
-        description='The frequency occurrence of each DAG cycle, e.g. @hourly, @daily, @weekly, @monthly, @yearly',
-        title='Frequency',
-    )
-    interval: int = Field(
-        default=1,
-        description='The frequency interval multiplier between each DAG cycle',
-        gt=0,
-        title='Interval',
-    )
-    parallel_chunks: int = Field(
-        default=1,
-        alias='parallelChunks',
-        description='The number of concurrent chunks to run in parallel. Defaults to 1. A concurrent chunk will ignore dependencies from previous chunks',
-        gt=0,
-        title='Parallelchunks',
-    )
-    dag: list[PipelineDAGTask] = Field(
-        ..., description='List of arbitrary pipeline tasks', title='Dag'
     )
 
 

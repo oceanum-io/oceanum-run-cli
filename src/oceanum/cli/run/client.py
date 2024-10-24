@@ -12,8 +12,9 @@ import humanize
 import requests
 from pydantic import SecretStr, RootModel, Field, model_validator, ValidationError
 
+from oceanum.cli.common.symbols import spin, chk, err, wrn, watch, globe
 from . import models
-from .utils import format_route_status as _frs, wrn, chk, spin, err, watch, globe
+from .utils import format_route_status as _frs
 
 class RevealedSecretStr(RootModel):
     root: Optional[str|SecretStr] = None
@@ -179,7 +180,7 @@ class DeployManagerClient:
             spec_builds = resources.builds if resources else None
             if project_spec is not None and resources and spec_builds:                
                 click.echo(f' {spin} {spin} Revision expects one or more images to be built, this can take several minutes...')
-                time.sleep(self._lag*3)
+                time.sleep(self._lag*6)
                 while True:
                     updating_builds = []
                     ready_builds = []

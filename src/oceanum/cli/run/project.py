@@ -10,11 +10,12 @@ import click
 from oceanum.cli.common.renderer import Renderer, RenderField
 
 from oceanum.cli.auth import login_required
+from oceanum.cli.common.symbols import spin, chk, err, wrn, info, key
 from .client import DeployManagerClient
 from .main import list_group, describe_group, delete, run_group, update_group, allow_group
 from . import models
 from .utils import (
-    spin, chk, err, wrn, key, info, echoerr, merge_secrets,
+    echoerr, merge_secrets,
     project_status_color as psc,
     stage_status_color as ssc,
 )
