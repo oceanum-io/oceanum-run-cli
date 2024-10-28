@@ -3,11 +3,14 @@ import sys
 import click
 
 from oceanum.cli.common.renderer import Renderer, RenderField
+from oceanum.cli.common.symbols import err
 from oceanum.cli.auth import login_required
+
 from . import models
 from .main import describe_group
 from .client import DeployManagerClient
-from .utils import chk, wrn, err, echoerr
+
+from .utils import echoerr
 
 @describe_group.command(name='user', help='List DPM Users')
 @click.pass_context
