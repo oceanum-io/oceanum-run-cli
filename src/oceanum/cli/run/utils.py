@@ -1,6 +1,8 @@
 
 import click
 
+from oceanum.cli.common.symbols import wrn
+
 from .models import ErrorResponse, ProjectSpec, SecretData
 
 def format_route_status(status: str) -> str:
